@@ -8,4 +8,4 @@ It is built using Next.js for the frontend and can integrate with hardware like 
 *   **Intelligent AI Alerts:** Leverages Generative AI to analyze vital sign data, determine the severity of threshold breaches, and provide actionable recommendations.
 *   **High Accuracy:** The system is designed for high accuracy in vital tracking (over 92% in tests), enhancing emergency response capabilities.
 *   **Scalable Telemedicine:** Provides a foundation for scalable telemedicine support, allowing healthcare professionals to monitor patients remotely.
-*   DEPLOYMENT LINK- vital-track-b37cjgdjk-jedislayer009s-projects.vercel.app
+  DEPLOYMENT LINK- vital-track-b37cjgdjk-jedislayer009s-projects.vercel.app
