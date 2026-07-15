@@ -19,9 +19,9 @@
       }
     ],
     "paths": {
-      "@/*": ["aman/src/*"]
+      "@/*": ["./src/*"]
     }
   },
   "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["aman/node_modules"]
+  "exclude": ["node_modules"]
 }

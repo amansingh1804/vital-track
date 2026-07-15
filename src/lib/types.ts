@@ -18,6 +18,10 @@ export type PatientData = {
   patientName: string;
   patientAge: number;
   patientContext: string;
+  gender?: string;
+  bloodType?: string;
+  weight?: string;
+  height?: string;
 };
 
 export type Thresholds = {

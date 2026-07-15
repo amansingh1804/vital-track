@@ -18,6 +18,12 @@ import {
   Move,
   Droplet,
   Thermometer,
+  Edit,
+  Activity,
+  FileText,
+  Check,
+  Copy,
+  Cpu,
 } from 'lucide-react';
 import {
   Area,
@@ -58,6 +64,27 @@ import { Separator } from './ui/separator';
 import { useIsMobile } from '../hooks/use-mobile';
 import { format } from 'date-fns';
 import { cn } from '../lib/utils';
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetHeader,
+  SheetTitle,
+} from './ui/sheet';
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from './ui/dialog';
+import {
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
+} from './ui/tabs';
 
 const ecgChartConfig = {
   value: {
@@ -96,86 +123,168 @@ export default function Dashboard() {
   const isMobile = useIsMobile();
   const unreadAlerts = state.alerts.filter(a => !a.isRead).length;
 
+  const [isPatientSheetOpen, setIsPatientSheetOpen] = React.useState(false);
+  const [isConnectDialogOpen, setIsConnectDialogOpen] = React.useState(false);
+  const [selectedBaudRate, setSelectedBaudRate] = React.useState(9600);
+  const [isCopied, setIsCopied] = React.useState(false);
+
+  const handleCopy = (code: string) => {
+    navigator.clipboard.writeText(code);
+    setIsCopied(true);
+    setTimeout(() => setIsCopied(false), 2000);
+  };
+
+  const arduinoJsonCode = `// VitalTrack JSON Sender
+#include <Arduino.h>
+
+void setup() {
+  Serial.begin(9600); // Or your selected baud rate
+}
+
+void loop() {
+  // Print valid JSON stream
+  Serial.print("{\\"heartRate\\":");
+  Serial.print(random(65, 85));
+  Serial.print(",\\"spo2\\":");
+  Serial.print(random(95, 100));
+  Serial.print(",\\"temperature\\":");
+  Serial.print(36.5 + random(-5, 5)/10.0, 1);
+  Serial.print(",\\"systolic\\":");
+  Serial.print(random(115, 125));
+  Serial.print(",\\"diastolic\\":");
+  Serial.print(random(75, 85));
+  Serial.print(",\\"bodyMovement\\":\\"Still\\"");
+  Serial.println("}");
+  
+  delay(1000);
+}`;
+
+  const arduinoCsvCode = `// VitalTrack CSV Sender
+#include <Arduino.h>
+
+void setup() {
+  Serial.begin(9600); // Or your selected baud rate
+}
+
+void loop() {
+  // CSV Format: HR, SpO2, Systolic, Diastolic, Temp
+  Serial.print(random(65, 85)); // Heart Rate
+  Serial.print(",");
+  Serial.print(random(95, 100)); // SpO2
+  Serial.print(",");
+  Serial.print(random(115, 125)); // Systolic BP
+  Serial.print(",");
+  Serial.print(random(75, 85)); // Diastolic BP
+  Serial.print(",");
+  Serial.println(36.5 + random(-5, 5)/10.0, 1); // Temp (with newline at the end)
+  
+  delay(1000);
+}`;
+
+  const arduinoTextCode = `// VitalTrack Key-Value Raw Text Sender
+#include <Arduino.h>
+
+void setup() {
+  Serial.begin(9600); // Or your selected baud rate
+}
+
+void loop() {
+  // The website's smart parser automatically extracts parameters using regex
+  Serial.print("Pulse Rate: ");
+  Serial.print(random(65, 85));
+  Serial.print(" bpm | Oxygen Level: ");
+  Serial.print(random(95, 100));
+  Serial.print("% | Body Temp: ");
+  Serial.print(36.2 + random(0, 10)/10.0);
+  Serial.println("C");
+  
+  delay(1000);
+}`;
+
   const sidebarContent = (
     <>
-      <SidebarHeader className="p-4">
-        <div className="flex items-center gap-2">
-          <Logo className="size-8 text-primary" />
-          <h2 className="text-xl font-semibold tracking-tight">VitalTrack</h2>
+      <SidebarHeader className="p-4 border-b border-border bg-background/50">
+        <div className="flex items-center gap-2.5">
+          <Logo className="size-7 text-primary" />
+          <h2 className="text-lg font-bold tracking-tight text-foreground">VitalTrack</h2>
         </div>
       </SidebarHeader>
 
-      <SidebarContent className="p-4 pt-0">
-        <div className="space-y-6">
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-muted-foreground">Connection</h3>
-            <Button onClick={state.isConnected ? actions.disconnect : actions.connect} className="w-full" variant={state.isConnected ? 'destructive' : 'default'}>
-              {state.isConnecting ? <Loader className="animate-spin" /> : state.isConnected ? <Unplug /> : <Plug />}
-              {state.isConnecting ? 'Connecting...' : state.isConnected ? 'Disconnect' : 'Connect to Arduino'}
-            </Button>
-            <p className="mt-2 text-xs text-muted-foreground text-center">
-              Status: <span className={state.isConnected ? 'text-green-500' : 'text-red-500'}>{state.connectionStatus}</span>
-            </p>
-          </div>
-          
-          <Separator />
-          
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-muted-foreground">Patient Details</h3>
-            <form onSubmit={form.handleSubmit(actions.updatePatient)} className="space-y-2">
-              <div>
-                <Label htmlFor="patientName">Name</Label>
-                <Input id="patientName" {...form.register('patientName')} />
-              </div>
-              <div>
-                <Label htmlFor="patientAge">Age</Label>
-                <Input id="patientAge" type="number" {...form.register('patientAge', { valueAsNumber: true })} />
-              </div>
-              <div>
-                <Label htmlFor="patientContext">Medical History</Label>
-                <Textarea id="patientContext" {...form.register('patientContext')} rows={3} />
-              </div>
-              <Button type="submit" size="sm" className="w-full">
-                <Save /> Save Patient Info
+      <SidebarContent className="p-4 pt-4 space-y-5">
+        <div>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Serial Stream</h3>
+          {state.isConnected ? (
+            <div className="space-y-2">
+              <Button onClick={actions.disconnect} className="w-full gap-2 h-9 bg-destructive hover:bg-destructive/90 text-destructive-foreground text-xs font-semibold">
+                <Unplug className="size-4" /> Disconnect Device
               </Button>
-            </form>
-          </div>
-          
-          <Separator />
-
-          <div>
-            <h3 className="mb-2 text-sm font-medium text-muted-foreground">Alert Thresholds</h3>
-            <form onSubmit={form.handleSubmit(actions.updateThresholds)} className="space-y-4">
-              <div className="space-y-2">
-                <div>
-                  <Label htmlFor="hrMax">Heart Rate Max (bpm)</Label>
-                  <Input id="hrMax" type="number" {...form.register('hrMax', { valueAsNumber: true })} />
-                </div>
-                <div>
-                  <Label htmlFor="spo2Min">SpO2 Min (%)</Label>
-                  <Input id="spo2Min" type="number" {...form.register('spo2Min', { valueAsNumber: true })} />
-                </div>
-                <div>
-                  <Label htmlFor="bpSystolicMax">Systolic BP Max (mmHg)</Label>
-                  <Input id="bpSystolicMax" type="number" {...form.register('bpSystolicMax', { valueAsNumber: true })} />
-                </div>
-                <div>
-                  <Label htmlFor="bpDiastolicMax">Diastolic BP Max (mmHg)</Label>
-                  <Input id="bpDiastolicMax" type="number" {...form.register('bpDiastolicMax', { valueAsNumber: true })} />
-                </div>
-                 <div>
-                  <Label htmlFor="tempMax">Temp Max (°C)</Label>
-                  <Input id="tempMax" type="number" {...form.register('tempMax', { valueAsNumber: true })} />
-                </div>
+              <div className="rounded-lg bg-emerald-500/10 border border-emerald-500/20 p-2.5 text-center">
+                <span className="text-xs text-emerald-400 font-medium">
+                  Connected on USB ({state.activeBaudRate} bps)
+                </span>
               </div>
-              <Button type="submit" size="sm" className="w-full"><Settings /> Set Thresholds</Button>
-            </form>
-          </div>
+            </div>
+          ) : (
+            <div className="space-y-2">
+              <Button 
+                onClick={() => setIsConnectDialogOpen(true)} 
+                className="w-full gap-2 h-9 text-xs font-semibold"
+                variant="default"
+              >
+                <Plug className="size-4" /> Connect to Arduino
+              </Button>
+              <div className="rounded-lg bg-secondary/20 border border-border p-2.5 text-center">
+                <span className="text-xs text-muted-foreground font-medium">
+                  Streaming simulated vitals
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+        
+        <Separator />
+        
+        <div>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Patient File</h3>
+          <Button onClick={() => setIsPatientSheetOpen(true)} variant="outline" className="w-full justify-start gap-2 h-9 text-xs border-primary/10">
+            <User className="size-4 text-primary" /> Edit Patient Information
+          </Button>
+        </div>
+        
+        <Separator />
+
+        <div>
+          <h3 className="mb-2 text-xs font-bold uppercase tracking-wider text-muted-foreground">Alert Thresholds</h3>
+          <form onSubmit={form.handleSubmit(actions.updateThresholds)} className="space-y-3">
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1">
+                <Label htmlFor="hrMax" className="text-[10px] font-semibold text-muted-foreground">Heart Rate Max</Label>
+                <Input id="hrMax" type="number" className="h-8 text-xs bg-background border-border" {...form.register('hrMax', { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="spo2Min" className="text-[10px] font-semibold text-muted-foreground">SpO2 Min (%)</Label>
+                <Input id="spo2Min" type="number" className="h-8 text-xs bg-background border-border" {...form.register('spo2Min', { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="bpSystolicMax" className="text-[10px] font-semibold text-muted-foreground">Systolic BP Max</Label>
+                <Input id="bpSystolicMax" type="number" className="h-8 text-xs bg-background border-border" {...form.register('bpSystolicMax', { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-1">
+                <Label htmlFor="bpDiastolicMax" className="text-[10px] font-semibold text-muted-foreground">Diastolic BP Max</Label>
+                <Input id="bpDiastolicMax" type="number" className="h-8 text-xs bg-background border-border" {...form.register('bpDiastolicMax', { valueAsNumber: true })} />
+              </div>
+              <div className="space-y-1 col-span-2">
+                <Label htmlFor="tempMax" className="text-[10px] font-semibold text-muted-foreground">Temperature Max (°C)</Label>
+                <Input id="tempMax" type="number" className="h-8 text-xs bg-background border-border" {...form.register('tempMax', { valueAsNumber: true })} />
+              </div>
+            </div>
+            <Button type="submit" size="sm" className="w-full gap-1 h-8 text-xs bg-secondary/80 hover:bg-secondary text-secondary-foreground font-semibold"><Settings className="size-3" /> Save Thresholds</Button>
+          </form>
         </div>
       </SidebarContent>
 
-      <SidebarFooter className="p-4 border-t">
-        <p className="text-xs text-muted-foreground">&copy; 2024 VitalTrack</p>
+      <SidebarFooter className="p-4 border-t border-border bg-background/50">
+        <p className="text-[10px] text-muted-foreground text-center">&copy; 2026 VitalTrack System</p>
       </SidebarFooter>
     </>
   );
@@ -262,6 +371,74 @@ export default function Dashboard() {
           </header>
 
           <main className="flex-1 p-4 sm:p-6 grid grid-cols-1 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+            {/* Top Patient Profile Banner Card */}
+            <Card className="col-span-1 lg:col-span-3 xl:col-span-4 bg-gradient-to-r from-card/90 to-secondary/20 border-border relative overflow-hidden shadow-md rounded-xl p-5 flex flex-col md:flex-row justify-between items-start md:items-center gap-6">
+              <div className="flex items-center gap-4 flex-1">
+                <div className="relative">
+                  <div className="size-14 rounded-full bg-primary/10 border border-primary/20 flex items-center justify-center font-bold text-lg text-primary tracking-wide shadow-inner">
+                    {state.patient.patientName ? state.patient.patientName.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2) : 'PT'}
+                  </div>
+                  {/* Pulse Ring Status indicator */}
+                  <span className="absolute bottom-0 right-0 flex h-3.5 w-3.5">
+                    <span className={cn(
+                      "animate-ping absolute inline-flex h-full w-full rounded-full opacity-75",
+                      state.alerts.some(a => a.severity === 'critical') ? 'bg-destructive' : 'bg-emerald-500'
+                    )}></span>
+                    <span className={cn(
+                      "relative inline-flex rounded-full h-3.5 w-3.5 border-2 border-card",
+                      state.alerts.some(a => a.severity === 'critical') ? 'bg-destructive' : 'bg-emerald-500'
+                    )}></span>
+                  </span>
+                </div>
+                
+                <div className="space-y-1">
+                  <div className="flex items-center gap-2.5">
+                    <h2 className="text-xl font-bold text-foreground leading-none">{state.patient.patientName || 'Anonymous Patient'}</h2>
+                    <span className="text-xs bg-muted px-2 py-0.5 rounded text-muted-foreground font-medium border border-border">
+                      ID: #VT-{state.patient.patientAge || '45'}
+                    </span>
+                  </div>
+                  <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
+                    <span><strong>Age:</strong> {state.patient.patientAge || '--'} yrs</span>
+                    <span className="text-muted-foreground/30">•</span>
+                    <span><strong>Gender:</strong> {state.patient.gender || '--'}</span>
+                    <span className="text-muted-foreground/30">•</span>
+                    <span><strong>Blood:</strong> {state.patient.bloodType || '--'}</span>
+                    <span className="text-muted-foreground/30">•</span>
+                    <span><strong>Weight:</strong> {state.patient.weight || '--'}</span>
+                    <span className="text-muted-foreground/30">•</span>
+                    <span><strong>Height:</strong> {state.patient.height || '--'}</span>
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex-1 md:max-w-md bg-secondary/10 p-3 rounded-lg border border-border/50 text-xs">
+                <span className="font-semibold text-muted-foreground uppercase tracking-wider text-[10px] block mb-1">Clinical Summary & Context</span>
+                <p className="text-foreground/90 line-clamp-2 italic">
+                  "{state.patient.patientContext || 'No medical record description provided.'}"
+                </p>
+              </div>
+
+              <div className="flex items-center gap-3 w-full md:w-auto justify-end">
+                <div className="text-right hidden sm:block">
+                  <span className="text-[10px] font-semibold text-muted-foreground uppercase tracking-wider block">Source Protocol</span>
+                  <span className="text-xs font-semibold text-foreground flex items-center gap-1">
+                    <Activity className="size-3 text-primary animate-pulse" />
+                    {state.isConnected ? `USB serial @ ${state.activeBaudRate || '9600'} baud` : 'Mock Vital Simulator'}
+                  </span>
+                </div>
+                
+                <Button 
+                  onClick={() => setIsPatientSheetOpen(true)} 
+                  variant="outline" 
+                  size="sm" 
+                  className="gap-1.5 h-9 font-medium text-xs border-primary/20 hover:bg-secondary/40 text-primary-foreground bg-primary/5"
+                >
+                  <Edit className="size-3.5" /> Edit Record
+                </Button>
+              </div>
+            </Card>
+
             <Card className="lg:col-span-2 xl:col-span-2">
               <CardHeader className="flex flex-row items-center justify-between">
                 <CardTitle className="flex items-center gap-2">
@@ -371,7 +548,7 @@ export default function Dashboard() {
               <CardContent className="flex items-center justify-center h-[200px]">
                 <div className="text-center">
                   <p className="text-4xl font-bold">
-                    {state.vitals.temperature ?? '--'}
+                    {state.vitals.temperature != null ? state.vitals.temperature.toFixed(1) : '--'}
                   </p>
                   <p className="text-sm text-muted-foreground">°C</p>
                 </div>
@@ -390,7 +567,6 @@ export default function Dashboard() {
               </CardContent>
             </Card>
 
-
             <Card className="lg:col-span-3 xl:col-span-3 hidden xl:block">
               <CardHeader>
                 <CardTitle className="flex items-center gap-2">
@@ -402,6 +578,174 @@ export default function Dashboard() {
               </CardContent>
             </Card>
           </main>
+
+          {/* Arduino Setup Dialog */}
+          <Dialog open={isConnectDialogOpen} onOpenChange={setIsConnectDialogOpen}>
+            <DialogContent className="max-w-2xl max-h-[85vh] overflow-y-auto bg-card border-border">
+              <DialogHeader>
+                <DialogTitle className="flex items-center gap-2 text-xl font-bold text-foreground">
+                  <Cpu className="text-primary size-6" /> Arduino Setup & Connection
+                </DialogTitle>
+                <DialogDescription className="text-muted-foreground text-sm">
+                  Configure your connection settings and copy standard Arduino starter sketches.
+                </DialogDescription>
+              </DialogHeader>
+              
+              <Tabs defaultValue="setup" className="w-full mt-4">
+                <TabsList className="grid w-full grid-cols-4 bg-muted">
+                  <TabsTrigger value="setup">Setup</TabsTrigger>
+                  <TabsTrigger value="json">JSON Code</TabsTrigger>
+                  <TabsTrigger value="csv">CSV Code</TabsTrigger>
+                  <TabsTrigger value="text">Text Code</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="setup" className="space-y-4 pt-4">
+                  <div className="space-y-2">
+                    <Label htmlFor="baudRate" className="text-sm font-semibold">Baud Rate (Bits Per Second)</Label>
+                    <div className="grid grid-cols-5 gap-2">
+                      {[9600, 19200, 38400, 57600, 115200].map((rate) => (
+                        <Button
+                          key={rate}
+                          type="button"
+                          variant={selectedBaudRate === rate ? 'default' : 'outline'}
+                          className="h-9 text-xs"
+                          onClick={() => setSelectedBaudRate(rate)}
+                        >
+                          {rate}
+                        </Button>
+                      ))}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">
+                      Ensure this matches the <code className="bg-muted px-1 py-0.5 rounded text-primary font-mono">Serial.begin(baudRate)</code> parameter in your Arduino sketch.
+                    </p>
+                  </div>
+                  
+                  <div className="rounded-lg border bg-secondary/20 p-4 space-y-2">
+                    <h4 className="text-sm font-semibold text-foreground flex items-center gap-1.5">
+                      <Activity className="size-4 text-emerald-500 animate-pulse" /> Plug-and-Play Parsing
+                    </h4>
+                    <p className="text-xs text-muted-foreground leading-relaxed">
+                      Our system runs an intelligent parser. It will automatically detect data in <strong>JSON</strong>, <strong>CSV (Comma-Separated)</strong>, or <strong>Raw Key-Value pairs</strong> (e.g. <code className="text-primary font-mono">Pulse Rate: 75 bpm</code>) dynamically. Just plug your device, configure the baud rate, and stream!
+                    </p>
+                  </div>
+
+                  <div className="flex justify-end gap-2 pt-2">
+                    <Button variant="outline" onClick={() => setIsConnectDialogOpen(false)}>Cancel</Button>
+                    <Button onClick={() => {
+                      setIsConnectDialogOpen(false);
+                      actions.connect(selectedBaudRate);
+                    }} className="bg-primary hover:bg-primary/90 text-primary-foreground font-semibold px-6">
+                      Select Port & Start Stream
+                    </Button>
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="json" className="space-y-3 pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">Upload this code to stream via formatted JSON objects.</span>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={() => handleCopy(arduinoJsonCode)}>
+                      {isCopied ? <Check className="size-3 text-green-500" /> : <Copy className="size-3" />}
+                      {isCopied ? 'Copied' : 'Copy Code'}
+                    </Button>
+                  </div>
+                  <pre className="p-3 bg-muted rounded-md text-xs overflow-x-auto max-h-[300px] font-mono text-emerald-400 border border-border">
+                    {arduinoJsonCode}
+                  </pre>
+                </TabsContent>
+                
+                <TabsContent value="csv" className="space-y-3 pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">Upload this code to stream using comma-separated vital readings.</span>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={() => handleCopy(arduinoCsvCode)}>
+                      {isCopied ? <Check className="size-3 text-green-500" /> : <Copy className="size-3" />}
+                      {isCopied ? 'Copied' : 'Copy Code'}
+                    </Button>
+                  </div>
+                  <pre className="p-3 bg-muted rounded-md text-xs overflow-x-auto max-h-[300px] font-mono text-emerald-400 border border-border">
+                    {arduinoCsvCode}
+                  </pre>
+                </TabsContent>
+
+                <TabsContent value="text" className="space-y-3 pt-4">
+                  <div className="flex justify-between items-center">
+                    <span className="text-xs text-muted-foreground">Upload this code to stream using simple key-value tags.</span>
+                    <Button size="sm" variant="ghost" className="h-7 text-xs gap-1.5" onClick={() => handleCopy(arduinoTextCode)}>
+                      {isCopied ? <Check className="size-3 text-green-500" /> : <Copy className="size-3" />}
+                      {isCopied ? 'Copied' : 'Copy Code'}
+                    </Button>
+                  </div>
+                  <pre className="p-3 bg-muted rounded-md text-xs overflow-x-auto max-h-[300px] font-mono text-emerald-400 border border-border">
+                    {arduinoTextCode}
+                  </pre>
+                </TabsContent>
+              </Tabs>
+            </DialogContent>
+          </Dialog>
+
+          {/* Patient Info Side Sheet popup */}
+          <Sheet open={isPatientSheetOpen} onOpenChange={setIsPatientSheetOpen}>
+            <SheetContent className="w-full sm:max-w-md overflow-y-auto bg-card border-l border-border p-6">
+              <SheetHeader className="mb-6">
+                <SheetTitle className="text-xl font-bold flex items-center gap-2 text-foreground">
+                  <User className="size-5 text-primary" /> Patient Medical File
+                </SheetTitle>
+                <SheetDescription className="text-muted-foreground text-xs">
+                  Update the active patient credentials, anthropometric measures, and clinical context.
+                </SheetDescription>
+              </SheetHeader>
+              
+              <form onSubmit={form.handleSubmit((data) => {
+                actions.updatePatient(data);
+                setIsPatientSheetOpen(false);
+              })} className="space-y-4">
+                <div className="space-y-1">
+                  <Label htmlFor="patientName" className="text-xs font-semibold text-muted-foreground">Full Name</Label>
+                  <Input id="patientName" className="bg-background border-border" {...form.register('patientName')} />
+                </div>
+
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-1">
+                    <Label htmlFor="patientAge" className="text-xs font-semibold text-muted-foreground">Age (years)</Label>
+                    <Input id="patientAge" type="number" className="bg-background border-border" {...form.register('patientAge', { valueAsNumber: true })} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="gender" className="text-xs font-semibold text-muted-foreground">Gender</Label>
+                    <Input id="gender" className="bg-background border-border" {...form.register('gender')} placeholder="Female / Male / Other" />
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-3 gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="bloodType" className="text-xs font-semibold text-muted-foreground">Blood Type</Label>
+                    <Input id="bloodType" className="bg-background border-border" {...form.register('bloodType')} placeholder="A+" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="weight" className="text-xs font-semibold text-muted-foreground">Weight</Label>
+                    <Input id="weight" className="bg-background border-border" {...form.register('weight')} placeholder="62 kg" />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="height" className="text-xs font-semibold text-muted-foreground">Height</Label>
+                    <Input id="height" className="bg-background border-border" {...form.register('height')} placeholder="165 cm" />
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <Label htmlFor="patientContext" className="text-xs font-semibold text-muted-foreground">Medical History & Diagnosis</Label>
+                  <Textarea id="patientContext" className="bg-background border-border" {...form.register('patientContext')} rows={5} placeholder="History of cardiovascular diseases, hypertension..." />
+                </div>
+                
+                <div className="pt-4 flex gap-2">
+                  <Button type="button" variant="outline" className="w-full" onClick={() => setIsPatientSheetOpen(false)}>
+                    Cancel
+                  </Button>
+                  <Button type="submit" className="w-full bg-primary hover:bg-primary/90 text-primary-foreground font-semibold">
+                    <Save className="mr-1.5 size-4" /> Save Record
+                  </Button>
+                </div>
+              </form>
+            </SheetContent>
+          </Sheet>
+
         </SidebarInset>
       </div>
     </SidebarProvider>
